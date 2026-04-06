@@ -1,4 +1,4 @@
-# MSFS_AutoFPS v0.4.6.6
+# MSFS_AutoFPS v0.4.6.7
 
 ## Notice
 My future development efforts on this app are mainly limited to maintenance, resilience improvements and streamlining of existing functionality only. I do add new functionality at times, mainly from my existing wishlist. I occasionally accept user requests for new functionality, however these will only be accepted if I judge it to be a great idea and it is technically achievable, useful to the majority of users, consistent with AutoFPS's existing design philosophy, with neglible, or preferably no, UI impact, and if I have the available time to do it.
@@ -251,25 +251,39 @@ Some Notes:
   - Can be started anytime, but preferably just after MSFS has loaded in to the main menu to minimise sudden MSFS settings changes when the app is initialising. The app will exit itself when MSFS closes. 
   - With the default install option, the app's icon more intuitively resides on the task bar when the app is running, not in the system tray overflow where it has been located in previous versions. Exit by clicking on the app window's close button and providing user confirmation when prompted.
   - If installed with the close app to system tray option, the app will remain running in the system tray until the user right clicks and selects Exit or the app auto exits when MSFS closes.
-  - The app window's minimised/maximised state will be remembered between sessions and will be restored on the next startup.
-  - The apps window's position will be remembered between sessions, except movements to it made while in VR due to window restoration issues. If there are issues with the window not displaying correctly on start-up, as can happen when auto-starting the app through MSFS or FSUIPC, either don't use auto-start, restart the app within 15 seconds of last closing it to auto reset the window position, or manually permanently disable this feature in the config file by setting the RememberWindowPos line to be false.
-  - The user can progressively hide parts of the UI when the app window is double clicked anywhere that is not a control. The first double click will hide the Expert settings section (if applicable), the second will hide the general settings section and a third double click will restore all hidden settings sections. The last state in use will be restored when next starting the app. 
   - Running as Admin NOT usually required (BUT: It is required to be run under the same User/Elevation as MSFS).
   - Do NOT change MSFS graphics settings manually while in a flight with this app running as it will conflict with what the app is managing and they will automatically restore to what they originally were when you exit your flight. If you wish to change the defaults for these MSFS settings, you must do so either without this app running or, if it is, only while you are in the MSFS main menu (ie not in a flight).
+- App Window
+  - Position and minimised/maximised state will be remembered between sessions, except movements to it made while in VR due to window restoration issues.
+    - Manually permanently disable this feature in the config file by setting the RememberWindowPos line to be false.
+  - Will automatically reset to default position (50,50) if the app is restarted within 15 seconds of last closing, except if disabled by settting the AllowWindowPosReset key to false in the common config file.
+  - The user can progressively hide parts of the UI when the app window is double clicked anywhere that is not a control. The first double click will hide the Expert settings section (if applicable), the second will hide the general settings section and a third double click will restore all hidden settings sections. The last state in use will be restored when next starting the app.
 - Connection Status
   - Red values indicate not connected, green is connected or royal blue for the Sim Version if the MSFS Performance Optimiser is enabled.
   - Automatically identifies which MSFS version is in use as either MSFS2020 or MSFS2024 and the version number. 
   - If the sim version is showing in red and is not the MSFS version you wish to configure before starting that MSFS version, click the 20>24 or 24>20 button, as applicable, and it will change to that.
-  - When the MSFS Performance Optimiser is enabled via the "+" checkbox to the left of the Sim Version label:
+  - MSFS Performance Optimiser - enabled via the "+" checkbox to the left of the Sim Version label:
     - The Sim Values panel reflects optimiser‑controlled states such as CPU affinity, process priority, and power‑plan selection, updating immediately when these values are applied or restored.
-    - Designed to change states only when they have not already been modified by other tools (e.g., VR Auto Optimiser, Process Lasso), ensuring no conflict with external managers.
-    - The **Sim Version text changes to royal blue** to indicate the optimiser is active and controlling MSFS.
-    - Provides four user‑configurable options in the common config file in the app's root directory:
-      - AffinityPhysicalCoreThreshold – sets the logical‑CPU cutoff for physical‑core affinity; default is 6, and set to 32 to effectively disable.
-      - AMDUseFirstCCDOnly – enables first‑CCD‑only affinity on dual‑CCD AMD CPUs; default is enabled.
-      - MSFSProcessPriority – selects the MSFS process priority; Normal, AboveNormal and High are the only allowable choices; default is High.
-      - PowerPlanEnabled – toggles automatic power‑plan switching; default is enabled.
-    - The optimiser tooltip dynamically rebuilds on load to show the active configuration, including the selected power plan, physical‑core affinity threshold, and MSFS process priority.
+    - Designed to change states only when they are at their default levels and have not already been modified by other tools (e.g., VR Auto Optimiser, Process Lasso), ensuring no conflict with external managers.
+    - The Sim Version text changes to royal blue to indicate the optimiser is active and controlling MSFS.
+    - Provides UI controls for Physical Cores, MSFS process priority, and Best Windows Power Plan, shown  in Expert Mode when hovering over the optimiser checkbox or MSFS label.
+    - Can be fine‑tuned with four user‑configurable options in the common config file in the app’s root directory.
+    - CPU Affinity:
+      - Uses a universal physical‑core rule based on SMT that gives consistent behaviour across AMD, Intel hybrid, and SMT‑off systems.
+      - On Intel hybrid CPUs, MSFS runs on the P‑cores only, since E‑cores don’t support SMT and aren’t counted as physical cores in this rule.
+      - The `AffinityPhysicalCoreThreshold` key, defaulting to 6, controls the SMT‑core threshold at which physical‑core‑only affinity is applied; setting this value to 32 effectively disables the feature on most CPUs.
+      - The `AMDUseFirstCCDOnly` key, defaulting to true, activates first‑CCD affinity mode on dual‑CCD AMD CPUs. The tooltip appends "CCD+" to the physical‑core affinity line when this mode is active.
+      - When enabled, sets CPU affinity to physical cores only, excluding SMT threads, and provides warnings or CCD‑specific options where applicable.
+    - MSFS Process Priority:
+      - Changes priority only when MSFS is running at the default Normal level, switching it to High when available and leaving any user‑set AboveNormal or RealTime priority untouched.
+      - The `MSFSProcessPriority` key, defaulting to High, controls the target MSFS process priority (Normal / AboveNormal / High). RealTime is intentionally excluded because using it would require AutoFPS itself to run elevated.
+      - Priority level is selectable via a dropdown UI control.
+    - Windows Power Plan:
+      - Overrides the power plan only when starting from the default Balanced plan, choosing Ultimate Performance or High Performance depending on availability.
+      - The `PowerPlanEnabled` key, defaulting to true, explicitly enables or disables automatic power‑plan switching.
+      - Power‑plan selection is available as a UI toggle.
+    - Applies delayed second writes for both CPU affinity and process priority to ensure settings reliably stick on systems that ignore the initial set.
+    - The optimiser tooltip dynamically rebuilds on load to show the active configuration, including the selected power plan, physical‑core affinity threshold, MSFS process priority, and the current UI‑controlled states.
 - Sim Values
   - Will not show valid values unless all three connections are green, or royal blue for the Sim Version if the MSFS Performance Optimiser is enabled. n/a means not available right now.
   - When MSFS is detected and **NOT** in a flight session:
@@ -283,10 +297,9 @@ Some Notes:
   - FPS+ - shows the average FPS, filtered for spikes and dips, for the current graphics mode.
     - Smooths out any transient FPS spikes or dips experienced - such as those caused by sudden changes in view, panning, scenery loading or other transient events - so that undesired automated MSFS setting changes are minimised.
     - FPS values within 15% (FPS Sensitivity and Tolerance automation modes) or 10% (AutoTLOD and FPS Cap automation modes) of the current average are averaged over a 5 second rolling window of FPS values
-      - When **TestMode** is enabled in the common config file, the percentage deviation can be changed by modifying the **fpsDeviationPercent** key in the MSFS version config file.
     - FPS values outside of this range are considered outliers and are not included in the average until a sustained change over 3 seconds in the same direction is detected.
     - The average will recover more quickly if the very recent trend is detected to have minimal variance.
-    - Default averaging period is 5 seconds and can be changed in the config file for each MSFS version by changing the **fpsAverageSeconds** key.
+    - Averaging period is 5 seconds.
   - FPS source icon - RTSS (RivaTuner Statistics Server) or MSFS.
     - **[RTSS](https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/)** is a well-established tool for FPS monitoring, widely used in the gaming community and fully compatible with MSFS.
     - RTSS is the default FPS source and will automatically revert to MSFS as the FPS source if RTSS is not installed and running.
@@ -472,7 +485,7 @@ box to advise this.
       - TLOD Extra – additional TLOD applied under favourable performance conditions.
         - Applicable to FPS Cap mode in Expert mode, and to Non‑Expert mode when an FPS cap is auto‑detected.
         - When enabled, set target FPS equal to your FPS cap if using one, or slightly below your usual FPS if not, for correct logic.
-        - TLOD Base Extra
+        - TLOD Base Extra in FPS Cap mode
           - When enabled, allows TLOD Extra below Alt TLOD Top.
           - Multiplier configurable between 1.5 and 4 (default 2); auto‑limited so TLOD Base Min + Base Extra ≤ TLOD Top Min + Top Extra.
           - Multiplier tooltip shows TLOD Min including Extra total.
@@ -484,7 +497,7 @@ box to advise this.
         - TLOD Extra seek process starts automatically:
           - At flight commencement (regardless of aircraft position) and again when landed and stopped.
           - On climb through Alt TLOD Top.
-          - Periodically, every minute above Alt TLOD Top, if not already at TLOD Top Max.
+          - Periodically, every 30 seconds above Alt TLOD Top, if not already at TLOD Top Max and provided the FPS cap is consistently being met.
         - Seek can be restarted manually via Reset if flight conditions change and invalidate the original TLOD Base.
         - When seeking:
           - Large steps (up to TLOD Base) on the ground, prioritising timeliness.
@@ -509,8 +522,8 @@ box to advise this.
     - Disabled by default, as the larger TLOD changes it makes at lower altitudes may cause FPS drops and stutters on some systems.
   - TLOD Base Min - Sets the minimum TLOD the automation algorithm will use at or below the Base altitude. (Range: 10 - TLOD Max-10)
   - Alt TLOD Base - Altitude (AGL) at or below which TLOD will be at TLOD Base Min. (Range: 100 ft to 100,000 ft)
-  - TLOD Base Extra – additional TLOD Base applied under favourable performance conditions.
-    - When enabled, allows TLOD Extra below Alt TLOD Top.
+  - TLOD Base Extra in FPS Sensitivity or Tolerance modes
+    - When enabled, allows TLOD Extra below Alt TLOD Top under favourable performance conditions.
     - Multiplier configurable between 1.5 and 4 (default 2); auto‑limited so TLOD Base Min + Base Extra ≤ TLOD Top Max.
     - Multiplier tooltip shows TLOD Min including Extra total.
     - Requires ≥15% FPS headroom above target FPS. If using an FPS cap, set target FPS at least 15% below the cap (preferably more).
@@ -524,6 +537,11 @@ box to advise this.
     - Avoid rapid view changes or fast panning, especially initially while scenery loads, as this may trigger unnecessary reductions.
     - Cannot be enabled simultaneously with Auto Target FPS; the most recent selection takes precedence, with a dialog shown.
     - If VRAM+ limiting is active, Base Extra seeking is cancelled and may reset completely if severe.
+  - Start Max option for TLOD Extra
+    - Available for all automation modes supporting TLOD Extra, defaulting to disabled.
+    - When enabled, starts with maximum TLOD Extra instead of beginning at minimum and ramping upward.
+    - Replaces the initial 30-second FPS timer with a normal settle event, reducing startup settle time at the cost of potentially incomplete initial stabilisation.
+    - Due to the aggressive nature of this feature, initial performance may be sub-optimal and the final achievable TLOD Extra may be lower than when the feature is disabled.
   - TLOD Top
     - FPS Sensitivity and Tolerance modes:
       - TLOD Top Max – Maximum TLOD the automation algorithm may use. (Range: TLOD Base Min+10 to 1000)
@@ -635,10 +653,29 @@ box to advise this.
     - Logs the raw FPS and average FPS to one decimal place every second.
     - FPS value is displayed in two alternating purple shades when logging FPS details.
     - Clicking the FPS display while logging is active will cancel the current logging event.
-  - Auto detailed FPS logging on outlier FPS events.
-    - Logs for 1 second before (memorised) the first detected outlier FPS event and 10 seconds after the last outlier FPS event of an outlier sequence.
-    - Can run concurrently with the existing detailed FPS logging which is manually enabled by the user.
-  - Virtual screen coordinates and window position logging on app startup.
+  - Performance monitoring and logging:
+    - Shown as an extra line on the app status line during flight sessions.
+      - Total CPU – overall system CPU usage across all logical processors.
+      - Dominant Core – instantaneous load of the core selected by 10‑second averaging, including its core number.
+      - TopXAvg – instantaneous load of the busiest X (configurable) cores.
+      - MSFS CPU – MSFS CPU usage based on the applied affinity mask, showing core count when set.
+    - Extra debug logging in FPS Cap mode to provide clearer context when performance limits are hit.
+      - Ignores the first performance data sample, which is often an outlier due to startup conditions.
+      - Triggers: FPS‑cap breaches, recovery, and TLOD extra initial ground‑seek and initial in‑air re‑seek events (reset when the app is reset).
+      - Uses EWMA smoothing for Dominant, Max and MSFS CPU metrics, logging both raw and smoothed values to stabilise scheduler jitter and show clearer CPU‑pressure trends.
+      - Logged fields: FPS, ΔFPS, TLOD, AGL, Total CPU, Dominant Core, MSFS CPU, TopXAvg, GPU and VRAM (when detected). Where two values are logged, the first is raw and the second is EWMA‑smoothed.
+      - Configurable parameters in the common config file:
+        - perfLogTopCoreCount – X in TopXAvg, default 2.
+        - PerfLogBufferSize – number of pre‑breach and post‑recovery samples, default 15.
+        - PerfLoggingAlways – default false; logs performance data every second during flight when enabled (logs grow rapidly).
+        - EwmaAlpha – EWMA smoothing coefficient, default 0.1.
+        - MonitorMode – default false; disables all AutoFPS automation for baseline MSFS performance monitoring.
+          - Forces Test Mode and PerfLoggingAlways to enable CPU monitoring and performance logging.
+          - Hides the Expert settings panel.
+          - Excludes irrelevant log lines.
+          - Does not back up or restore UserCfg.opt.
+          - Shows Monitor Mode in the title bar.
+- Virtual screen coordinates and window position logging on app startup.
   - Detailed settings initialisation, reduction and recovery event logging, to aid troubleshooting and performance monitoring.
   - Verbose compatibility test results in log file.
 <br/><br/>
