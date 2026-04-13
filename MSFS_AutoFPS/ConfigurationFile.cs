@@ -1,6 +1,5 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
-using System.Security.RightsManagement;
 using System.Xml;
 
 namespace MSFS_AutoFPS
@@ -9,8 +8,20 @@ namespace MSFS_AutoFPS
     {
         private Dictionary<string, string> appSettings = new();
         private XmlDocument xmlDoc = new();
-        private string ConfigFile = App.ConfigFile;
-        private string ConfigFileLast = App.ConfigFile;
+        private string ConfigFile;
+        private string ConfigFileLast;
+
+        internal ConfigurationFile(string configFilePath)
+        {
+            ConfigFile = configFilePath;
+            ConfigFileLast = configFilePath;
+        }
+
+        public ConfigurationFile()
+        {
+            ConfigFile = App.ConfigFile;
+            ConfigFileLast = App.ConfigFile;
+        }
 
         public string this[string key]
         {
@@ -21,6 +32,11 @@ namespace MSFS_AutoFPS
         public bool LoadConfiguration(bool isSim2024)
         {
             ConfigFile = isSim2024 ? App.ConfigFile2024 : App.ConfigFile;
+            return LoadConfigurationFromFile();
+        }
+
+        internal bool LoadConfigurationFromFile()
+        {
             xmlDoc = new();
             xmlDoc.LoadXml(File.ReadAllText(ConfigFile));
 
