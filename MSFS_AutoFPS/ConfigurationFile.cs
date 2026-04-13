@@ -44,6 +44,39 @@ namespace MSFS_AutoFPS
             xmlDoc.Save(ConfigFile);
         }
 
+
+
+        public Dictionary<string, string> GetAllSettings()
+        {
+            return new Dictionary<string, string>(appSettings);
+        }
+
+        public void UpsertSetting(string key, string value, bool save = true)
+        {
+            if (appSettings.ContainsKey(key))
+            {
+                appSettings[key] = value;
+            }
+            else
+            {
+                XmlNode newNode = xmlDoc.CreateElement("add");
+
+                XmlAttribute attribute = xmlDoc.CreateAttribute("key");
+                attribute.Value = key;
+                newNode.Attributes.Append(attribute);
+
+                attribute = xmlDoc.CreateAttribute("value");
+                attribute.Value = value;
+                newNode.Attributes.Append(attribute);
+
+                xmlDoc.ChildNodes[1].AppendChild(newNode);
+                appSettings.Add(key, value);
+            }
+
+            if (save)
+                SaveConfiguration();
+        }
+
         public bool SettingExists(string key) 
         {
             if (appSettings.ContainsKey(key)) return true;

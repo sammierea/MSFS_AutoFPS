@@ -11,6 +11,7 @@ using System.Net;
 using System.Reflection;
 using System.Security.Policy;
 using System.ServiceProcess;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,6 +33,9 @@ namespace MSFS_AutoFPS
         protected ServiceModel serviceModel;
         protected DispatcherTimer timer;
         private bool firstRun = true;
+        private bool presetSelectionUpdate = false;
+        private const string PresetNamesKey = "PresetNames";
+        private const string ActivePresetKey = "ActivePreset";
 
         public MainWindow(NotifyIconViewModel notifyModel, ServiceModel serviceModel)
         {
@@ -88,7 +92,131 @@ namespace MSFS_AutoFPS
                 lblStatusMessage.Foreground = new SolidColorBrush(Colors.Green);
             }
 
+            EnsurePresetInitialization();
         }
+        private static string BuildPresetStorageKey(string presetName)
+        {
+            return "PresetData." + Uri.EscapeDataString(presetName);
+        }
+
+        private static string NormalizePresetName(string presetName)
+        {
+            if (string.IsNullOrWhiteSpace(presetName)) return string.Empty;
+            return presetName.Trim();
+        }
+
+        private List<string> GetPresetNames()
+        {
+            string presetNamesRaw = serviceModel.ConfigurationFile.GetSetting(PresetNamesKey, "Default");
+            List<string> names = presetNamesRaw.Split('|', StringSplitOptions.RemoveEmptyEntries)
+                .Select(name => NormalizePresetName(name))
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (names.Count == 0)
+                names.Add("Default");
+
+            return names;
+        }
+
+        private void SavePresetNames(List<string> presetNames)
+        {
+            serviceModel.ConfigurationFile.UpsertSetting(PresetNamesKey, string.Join("|", presetNames), true);
+        }
+
+        private Dictionary<string, string> CaptureCurrentSettingsSnapshot()
+        {
+            Dictionary<string, string> snapshot = serviceModel.ConfigurationFile.GetAllSettings();
+            List<string> keysToRemove = snapshot.Keys
+                .Where(key => key == PresetNamesKey || key == ActivePresetKey || key.StartsWith("PresetData.", StringComparison.Ordinal))
+                .ToList();
+
+            foreach (string key in keysToRemove)
+                snapshot.Remove(key);
+
+            return snapshot;
+        }
+
+        private void SaveCurrentSettingsToPreset(string presetName, bool setActivePreset)
+        {
+            presetName = NormalizePresetName(presetName);
+            if (string.IsNullOrWhiteSpace(presetName))
+                return;
+
+            List<string> presetNames = GetPresetNames();
+            if (!presetNames.Contains(presetName, StringComparer.OrdinalIgnoreCase))
+                presetNames.Add(presetName);
+
+            Dictionary<string, string> snapshot = CaptureCurrentSettingsSnapshot();
+            string presetJson = JsonSerializer.Serialize(snapshot);
+            serviceModel.ConfigurationFile.UpsertSetting(BuildPresetStorageKey(presetName), presetJson, false);
+
+            SavePresetNames(presetNames);
+
+            if (setActivePreset)
+                serviceModel.ConfigurationFile.UpsertSetting(ActivePresetKey, presetName, true);
+            else
+                serviceModel.ConfigurationFile.SaveConfiguration();
+
+            Logger.Log(LogLevel.Information, "MainWindow:SaveCurrentSettingsToPreset", $"Preset '{presetName}' saved with {snapshot.Count} settings");
+        }
+
+        private bool TryLoadPreset(string presetName)
+        {
+            presetName = NormalizePresetName(presetName);
+            if (string.IsNullOrWhiteSpace(presetName))
+                return false;
+
+            string presetJson = serviceModel.ConfigurationFile.GetSetting(BuildPresetStorageKey(presetName), string.Empty);
+            if (string.IsNullOrWhiteSpace(presetJson))
+                return false;
+
+            Dictionary<string, string> presetSettings = JsonSerializer.Deserialize<Dictionary<string, string>>(presetJson);
+            if (presetSettings == null || presetSettings.Count == 0)
+                return false;
+
+            foreach (var setting in presetSettings)
+                serviceModel.ConfigurationFile.UpsertSetting(setting.Key, setting.Value, false);
+
+            serviceModel.ConfigurationFile.UpsertSetting(ActivePresetKey, presetName, false);
+            serviceModel.ConfigurationFile.SaveConfiguration();
+            serviceModel.LoadConfiguration();
+
+            Logger.Log(LogLevel.Information, "MainWindow:TryLoadPreset", $"Preset '{presetName}' loaded");
+            return true;
+        }
+
+        private void RefreshPresetControls(bool keepCurrentText = true)
+        {
+            List<string> presetNames = GetPresetNames();
+            string activePreset = NormalizePresetName(serviceModel.ConfigurationFile.GetSetting(ActivePresetKey, presetNames.FirstOrDefault() ?? "Default"));
+            if (!presetNames.Contains(activePreset, StringComparer.OrdinalIgnoreCase))
+                activePreset = presetNames.First();
+
+            string currentText = keepCurrentText ? cbSettingsPreset.Text : activePreset;
+
+            presetSelectionUpdate = true;
+            cbSettingsPreset.ItemsSource = presetNames;
+            cbSettingsPreset.SelectedItem = presetNames.FirstOrDefault(name => string.Equals(name, activePreset, StringComparison.OrdinalIgnoreCase));
+            cbSettingsPreset.Text = string.IsNullOrWhiteSpace(currentText) ? activePreset : currentText;
+            presetSelectionUpdate = false;
+        }
+
+        private void EnsurePresetInitialization()
+        {
+            List<string> presetNames = GetPresetNames();
+            string activePreset = NormalizePresetName(serviceModel.ConfigurationFile.GetSetting(ActivePresetKey, presetNames.FirstOrDefault() ?? "Default"));
+            if (string.IsNullOrWhiteSpace(activePreset))
+                activePreset = presetNames.First();
+
+            bool hasActivePresetData = serviceModel.ConfigurationFile.SettingExists(BuildPresetStorageKey(activePreset));
+            if (!hasActivePresetData)
+                SaveCurrentSettingsToPreset(activePreset, true);
+
+            RefreshPresetControls(false);
+        }
+
         public static string GetFinalRedirect(string url)
         {
             if (string.IsNullOrWhiteSpace(url))
@@ -881,6 +1009,43 @@ namespace MSFS_AutoFPS
 
         }
  
+
+        private void cbSettingsPreset_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (presetSelectionUpdate || serviceModel == null)
+                return;
+
+            if (cbSettingsPreset.SelectedItem == null)
+                return;
+
+            string presetName = NormalizePresetName(cbSettingsPreset.SelectedItem.ToString());
+            if (string.IsNullOrWhiteSpace(presetName))
+                return;
+
+            string activePreset = NormalizePresetName(serviceModel.ConfigurationFile.GetSetting(ActivePresetKey, string.Empty));
+            if (!string.IsNullOrWhiteSpace(activePreset) && !string.Equals(activePreset, presetName, StringComparison.OrdinalIgnoreCase))
+                SaveCurrentSettingsToPreset(activePreset, false);
+
+            if (!TryLoadPreset(presetName))
+                return;
+
+            LoadSettings();
+            RefreshPresetControls(false);
+        }
+
+        private void btnSavePreset_Click(object sender, RoutedEventArgs e)
+        {
+            string presetName = NormalizePresetName(cbSettingsPreset.Text);
+            if (string.IsNullOrWhiteSpace(presetName))
+            {
+                MessageBox.Show("Enter a preset name before saving.", "Preset", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            SaveCurrentSettingsToPreset(presetName, true);
+            RefreshPresetControls(false);
+        }
+
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             try
